@@ -1,0 +1,27 @@
+--- a/package.json
++++ b/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "bufferutil",
++  "name": "@ohos-ports/bufferutil",
+   "version": "4.1.0",
+   "description": "WebSocket buffer utils",
+   "main": "index.js",
+@@ -13,7 +13,7 @@
+   },
+   "repository": {
+     "type": "git",
+-    "url": "https://github.com/websockets/bufferutil"
++    "url": "https://github.com/ohos-ports/ohos-ports"
+   },
+   "keywords": [
+     "bufferutil"
+@@ -21,7 +21,7 @@
+   "author": "Einar Otto Stangvik <einaros@gmail.com> (http://2x.io)",
+   "license": "MIT",
+   "bugs": {
+-    "url": "https://github.com/websockets/bufferutil/issues"
++    "url": "https://github.com/ohos-ports/ohos-ports/issues"
+   },
+   "homepage": "https://github.com/websockets/bufferutil",
+   "dependencies": {
