@@ -119,16 +119,18 @@ mv darwin-arm64/<pkg>.node darwin-arm64/@ohos-ports+<pkg>.node
 
 #### publish.sh — 发布脚本
 
-发布脚本通过 `npm stage publish` 进行分阶段发布，CI 中通过 NPM_TOKEN 认证：
+发布脚本通过 `npm stage publish --provenance` 进行分阶段发布，CI 中通过 NPM_TOKEN 认证：
 
 ```sh
 #!/bin/sh
 set -e
 
 cd <pkg>-<version>
-npm stage publish --tag latest --access public
+npm stage publish --provenance --tag latest --access public
 ```
 
+> `--provenance` 生成来源证明，需 ci.yml 中配置 `permissions: id-token: write`。NPM_TOKEN 负责认证，`--provenance` 负责生成签名，两者独立工作互不影响。
+>
 > stage 后包不会自动上线，需维护者在 npmjs.com 上 2FA 审核通过后正式发布。
 
 ### 5. 本地构建和验证
