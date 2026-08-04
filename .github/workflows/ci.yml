@@ -8,10 +8,9 @@ on:
     paths:
       - "ports/**"
 
-# OIDC 发布需要 id-token: write 权限
-# npm CLI 会自动检测 GitHub Actions 环境并交换 OIDC token，无需 NPM_TOKEN 密钥
+# 发布通过 npm stage publish + NPM_TOKEN 认证
+# stage 后需维护者在 npmjs.com 上 2FA 审核通过后正式上线
 permissions:
-  id-token: write
   contents: read
 
 jobs:
@@ -77,10 +76,14 @@ jobs:
           ./build.sh
 
       # 只有直接 push 或 PR 被合入时才会进行发布
-      # 通过 OIDC 发布，npm CLI 自动交换 token，无需 NPM_TOKEN 密钥
+      # 通过 NPM_TOKEN 认证执行 npm stage publish
+      # stage 后需维护者在 npmjs.com 上 2FA 审核通过后正式上线
       - name: Publish
         if: github.event_name == 'push'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
           source setup-env.sh
           cd "${{ matrix.dir }}"
           ./publish.sh
