@@ -115,11 +115,9 @@ mv darwin-arm64/<pkg>.node darwin-arm64/@ohos-ports+<pkg>.node
 # ... 其他平台同理
 ```
 
-> **关于 prebuilds 文件命名**：prebuildify 会根据 `package.json` 的 `name` 自动生成 scoped 格式的文件名（如 `@ohos-ports+bufferutil.node`）。其他平台从官方包复制的文件名为原始名（如 `bufferutil.node`），需要手动重命名为 scoped 格式以保持一致。
-
 #### publish.sh — 发布脚本
 
-发布脚本通过 `npm stage publish --provenance` 进行分阶段发布，CI 中通过 NPM_TOKEN 认证：
+发布脚本通过 `npm stage publish --provenance` 进行分阶段发布，`--provenance` 生成来源证明，CI 中通过 NPM_TOKEN 认证：
 
 ```sh
 #!/bin/sh
@@ -129,8 +127,6 @@ cd <pkg>-<version>
 npm stage publish --provenance --tag latest --access public
 ```
 
-> `--provenance` 生成来源证明，需 ci.yml 中配置 `permissions: id-token: write`。NPM_TOKEN 负责认证，`--provenance` 负责生成签名，两者独立工作互不影响。
->
 > stage 后包不会自动上线，需维护者在 npmjs.com 上 2FA 审核通过后正式发布。
 
 ### 5. 本地构建和验证
