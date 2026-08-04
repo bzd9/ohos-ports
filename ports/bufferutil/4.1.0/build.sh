@@ -10,7 +10,6 @@ patch -p1 < ../patchs/0001-update-package-json.patch
 npm install
 npm run prebuild
 
-# 把其他平台的预构建产物复制到包里面一起发布
 cd ..
 curl -fsSL https://registry.npmjs.org/bufferutil/-/bufferutil-4.1.0.tgz -o bufferutil-4.1.0.tgz
 tar -zxf bufferutil-4.1.0.tgz
