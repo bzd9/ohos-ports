@@ -8,6 +8,25 @@ ohos-ports 致力于将 npm 生态中的三方库移植到 OpenHarmony（以下�
 
 适配后的包统一发布到 npm 中心仓的 `@ohos-ports` scope 下，构建产物以社区版 OpenHarmony 为目标，通常也兼容 HarmonyOS 商用版本。
 
+
+## 📦 已发布的包
+
+当前 `ports/` 目录下维护的包（CI 流水线发布）：
+
+<!-- PORTS_TABLE_START -->
+| 包名 | 版本 | 安装 |
+|------|------|------|
+| @ohos-ports/bufferutil | 4.1.0-2 | `npm i @ohos-ports/bufferutil` |
+| @ohos-ports/bun-pty | 0.4.10-1 | `npm i @ohos-ports/bun-pty` |
+| @ohos-ports/lightningcss | 1.33.0-1 | `npm i @ohos-ports/lightningcss` |
+| @ohos-ports/opentui-core | 0.4.5-patch.2 | `npm i @ohos-ports/opentui-core` |
+| @ohos-ports/tailwindcss-oxide | 4.3.3-1 | `npm i @ohos-ports/tailwindcss-oxide` |
+<!-- PORTS_TABLE_END -->
+
+> 以上表格由 `python3 docs/update-packages.py` 自动生成，请勿手动编辑。
+
+完整的 @ohos-ports 包列表（含本地发布的 Beta 包）请通过[在线查询页](https://ohos-ports.github.io/ohos-ports/)查看。
+
 ## 端到端运作流程
 
 本项目采用 npm 分阶段发布（staged publishing）机制，CI 通过 NPM_TOKEN 认证执行 `npm stage publish`，发布后需维护者在 npmjs.com 上 2FA 审核通过后包才正式上线。

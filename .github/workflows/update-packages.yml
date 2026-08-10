@@ -1,0 +1,43 @@
+name: Update @ohos-ports Package List
+
+on:
+  schedule:
+    # 每天北京时间凌晨 2:00 自动运行（UTC 18:00）
+    - cron: '0 18 * * *'
+  workflow_dispatch: # 也支持手动触发
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Update packages.json
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # 用 npmjs.org 官方源（GitHub 服务器可直连）
+          export NPM_REGISTRY="https://registry.npmjs.org"
+          # 如果有 NPM_TOKEN，用它调 org API 获取完整包列表
+          if [ -n "$NPM_TOKEN" ]; then
+            export NPM_AUTH_TOKEN="$NPM_TOKEN"
+          fi
+          python3 docs/update-packages.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/packages.json
+          if git diff --staged --quiet; then
+            echo "No changes, skipping commit"
+          else
+            git commit -m "auto: update @ohos-ports package list [skip ci]"
+            git push
+          fi
