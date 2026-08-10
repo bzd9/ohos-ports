@@ -18,15 +18,10 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Update packages.json and README
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Update packages.jsonl and README
         run: |
           set -ex
           export NPM_REGISTRY="https://registry.npmjs.org"
-          if [ -n "$NPM_TOKEN" ]; then
-            export NPM_AUTH_TOKEN="$NPM_TOKEN"
-          fi
           python3 docs/update-packages.py
 
       - name: Commit and push if changed
@@ -34,7 +29,7 @@ jobs:
           set -ex
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/data/packages.json README.md
+          git add docs/data/packages.jsonl docs/data/index.json README.md
           if git diff --staged --quiet; then
             echo "No changes, skipping commit"
           else
