@@ -17,6 +17,7 @@ import json
 import os
 import re
 import urllib.request
+import urllib.error
 from datetime import date
 
 REGISTRY = os.environ.get("NPM_REGISTRY", "https://registry.npmmirror.com")
@@ -87,6 +88,9 @@ def query_package_detail(name):
     url = f"{REGISTRY}/{name.replace('/', '%2F')}"
     try:
         data = fetch_json(url)
+    except urllib.error.HTTPError as e:
+        print(f"    HTTP {e.code}: {e.reason}")
+        return None
     except Exception as e:
         print(f"    Error: {e}")
         return None
