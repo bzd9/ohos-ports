@@ -74,8 +74,7 @@ def get_ports_packages():
 def search_packages():
     """搜索 @ohos-ports 包，返回完整数据列表"""
     queries = [
-        ("scope:ohos-ports", "scope 限定符"),
-        ("%40ohos-ports", "全文搜索降级"),
+        ("%40ohos-ports", "全文搜索"),
     ]
 
     for query_text, desc in queries:
