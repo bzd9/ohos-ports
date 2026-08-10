@@ -6,16 +6,16 @@
 1. 生成 docs/data/packages.json（所有包，含正式+Beta）
 2. 更新 README.md 中的 ports 包列表表格（仅 ports/ 目录下的包）
 
-优先使用 Org API（需 NPM_AUTH_TOKEN），降级使用 Search API。
 用法：python3 docs/update-packages.py
 环境变量：
   NPM_REGISTRY   - 默认 https://registry.npmmirror.com
-  NPM_AUTH_TOKEN - npm access token，用于 Org API
+  NPM_AUTH_TOKEN - npm access token，用于 Org API（可选）
 """
 
 import json
 import os
 import re
+import time
 import urllib.request
 import urllib.error
 from datetime import date
@@ -29,10 +29,27 @@ OUTPUT_PATH = os.path.join(SCRIPT_DIR, "data", "packages.json")
 README_PATH = os.path.join(REPO_DIR, "README.md")
 
 
-def fetch_json(url, headers=None):
+def fetch_json(url, headers=None, retries=3):
+    """发送 HTTP 请求，返回 JSON，带重试"""
     req = urllib.request.Request(url, headers=headers or {"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read())
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                wait = 5 * (attempt + 1)
+                print(f"    429 Too Many Requests, waiting {wait}s... (attempt {attempt+1}/{retries})")
+                time.sleep(wait)
+                continue
+            raise
+        except Exception as e:
+            if attempt < retries - 1:
+                print(f"    Error: {e}, retrying... (attempt {attempt+1}/{retries})")
+                time.sleep(3)
+                continue
+            raise
+    raise Exception(f"Failed after {retries} retries: {url}")
 
 
 def get_ports_packages():
@@ -46,15 +63,16 @@ def get_ports_packages():
             continue
         versions = sorted([d for d in os.listdir(port_path) if os.path.isdir(os.path.join(port_path, d))])
         if versions:
-            ports[name] = versions[-1]  # 取最后一个版本
+            ports[name] = versions[-1]
     return ports
 
 
 def get_package_names():
     """获取所有 @ohos-ports 包名"""
+    # 方式1：尝试 Org API（需要 token）
     if NPM_AUTH_TOKEN:
         try:
-            print("Using Org API...")
+            print("Trying Org API...")
             url = f"{REGISTRY}/-/org/ohos-ports/packages"
             headers = {"Accept": "application/json", "Authorization": f"Bearer {NPM_AUTH_TOKEN}"}
             data = fetch_json(url, headers)
@@ -63,14 +81,20 @@ def get_package_names():
             if names:
                 return sorted(names)
         except Exception as e:
-            print(f"  Org API failed: {e}")
+            print(f"  Org API failed: {e}, falling back to Search API")
 
+    # 方式2：Search API（公开）
     print("Using Search API...")
     all_names = []
     page = 0
     while True:
         url = f"{REGISTRY}/-/v1/search?text=%40ohos-ports&size=250&from={page * 250}"
-        data = fetch_json(url)
+        print(f"  Search page {page}...")
+        try:
+            data = fetch_json(url)
+        except Exception as e:
+            print(f"  Search failed: {e}")
+            break
         objects = data.get("objects", [])
         for obj in objects:
             name = obj["package"]["name"]
@@ -79,20 +103,22 @@ def get_package_names():
         if len(all_names) >= data.get("total", 0) or not objects:
             break
         page += 1
-    print(f"  Search API found {len(all_names)} packages")
+        time.sleep(1)  # 避免速率限制
+
+    print(f"  Search found {len(all_names)} packages")
     return sorted(all_names)
 
 
-def query_package_detail(name):
+def query_package_detail(name, index, total):
     """查询单个包：获取正式版本、Beta版本、说明"""
     url = f"{REGISTRY}/{name.replace('/', '%2F')}"
     try:
-        data = fetch_json(url)
+        data = fetch_json(url, retries=2)
     except urllib.error.HTTPError as e:
-        print(f"    HTTP {e.code}: {e.reason}")
+        print(f"  [{index}/{total}] {name}: HTTP {e.code}")
         return None
     except Exception as e:
-        print(f"    Error: {e}")
+        print(f"  [{index}/{total}] {name}: Error: {e}")
         return None
 
     dist_tags = data.get("dist-tags", {})
@@ -100,7 +126,6 @@ def query_package_detail(name):
     latest = dist_tags.get("latest", "")
     beta = dist_tags.get("beta")
 
-    # 从版本列表中判断 stable/beta
     latest_stable = None
     latest_beta = None
     for v in sorted(versions.keys(), reverse=True):
@@ -111,7 +136,6 @@ def query_package_detail(name):
             if latest_stable is None:
                 latest_stable = v
 
-    # 优先用 dist-tags
     if latest and "beta" not in latest.lower():
         latest_stable = latest
     if beta:
@@ -120,6 +144,7 @@ def query_package_detail(name):
     latest_data = versions.get(latest_stable or latest or "", {})
     description = latest_data.get("description", "") or ""
 
+    print(f"  [{index}/{total}] {name}: stable={latest_stable or '-'}, beta={latest_beta or '-'}")
     return {
         "name": name,
         "stable_version": latest_stable,
@@ -136,7 +161,6 @@ def generate_packages_json(packages, ports_map):
         short_name = p["name"].replace("@ohos-ports/", "")
         is_ci = short_name in ports_map
 
-        # 判断说明：正式版本与Beta版本相同 → 仅发布了Beta
         desc = p["description"]
         if p["stable_version"] and p["beta_version"] and p["stable_version"] == p["beta_version"]:
             desc = f"（仅 Beta 发布）{desc}"
@@ -168,37 +192,31 @@ def generate_packages_json(packages, ports_map):
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
 
-    print(f"Generated packages.json: {len(result_packages)} packages (CI: {ci_count}, local: {local_count})")
+    print(f"\nGenerated packages.json: {len(result_packages)} packages (CI: {ci_count}, local: {local_count})")
     return result
 
 
 def update_readme_ports_table(ports_map, packages):
     """更新 README.md 中的 ports 包列表表格"""
-    # 读取当前 README
     with open(README_PATH, "r", encoding="utf-8") as f:
         readme = f.read()
 
-    # 生成表格
     lines = ["| 包名 | 版本 | 安装 |", "|------|------|------|"]
     for name in sorted(ports_map.keys()):
         npm_name = f"@ohos-ports/{name}"
-        # 从 packages 中找到对应的版本
         pkg = next((p for p in packages if p["name"] == npm_name), None)
         version = pkg["stable_version"] or pkg["beta_version"] or ports_map[name]
         lines.append(f"| {npm_name} | {version} | `npm i {npm_name}` |")
 
     new_table = "\n".join(lines)
 
-    # 用标记替换 README 中的表格区域
     start_marker = "<!-- PORTS_TABLE_START -->"
     end_marker = "<!-- PORTS_TABLE_END -->"
 
     if start_marker in readme and end_marker in readme:
-        # 替换标记之间的内容
         pattern = re.compile(re.escape(start_marker) + r".*?" + re.escape(end_marker), re.DOTALL)
         readme = pattern.sub(f"{start_marker}\n{new_table}\n{end_marker}", readme)
     else:
-        # 首次：在 "## 端到端运作流程" 前插入
         marker_block = f"<!-- PORTS_TABLE_START -->\n{new_table}\n<!-- PORTS_TABLE_END -->\n\n"
         if "## 端到端运作流程" in readme:
             readme = readme.replace("## 端到端运作流程", marker_block + "## 端到端运作流程")
@@ -214,26 +232,20 @@ def main():
     print(f"Registry: {REGISTRY}")
     print(f"Auth token: {'Yes' if NPM_AUTH_TOKEN else 'No'}")
 
-    # 1. 扫描 ports/ 目录
     ports_map = get_ports_packages()
     print(f"Ports directory: {len(ports_map)} packages - {list(ports_map.keys())}")
 
-    # 2. 获取所有 @ohos-ports 包名
     all_names = get_package_names()
 
-    # 3. 查询每个包的详细信息
     print(f"\nQuerying {len(all_names)} packages...")
     packages = []
     for i, name in enumerate(all_names):
-        print(f"  [{i+1}/{len(all_names)}] {name}")
-        detail = query_package_detail(name)
+        detail = query_package_detail(name, i + 1, len(all_names))
         if detail:
             packages.append(detail)
+        time.sleep(0.3)  # 避免速率限制
 
-    # 4. 生成 packages.json
     generate_packages_json(packages, ports_map)
-
-    # 5. 更新 README.md ports 表格
     update_readme_ports_table(ports_map, packages)
 
     print("\nDone!")
