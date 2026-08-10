@@ -22,7 +22,7 @@ jobs:
         run: |
           set -ex
           export NPM_REGISTRY="https://registry.npmjs.org"
-          python3 docs/update-packages.py
+          python3 -u docs/update-packages.py
 
       - name: Commit and push if changed
         run: |

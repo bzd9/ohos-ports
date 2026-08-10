@@ -94,11 +94,13 @@ def search_packages():
             if not objects:
                 break
 
+            page_ohos_count = 0
             for obj in objects:
                 pkg = obj.get("package", {})
                 name = pkg.get("name", "")
                 if not name.startswith("@ohos-ports/"):
                     continue
+                page_ohos_count += 1
 
                 version = pkg.get("version", "")
                 dist_tags = pkg.get("dist-tags", {})
@@ -109,7 +111,6 @@ def search_packages():
                 beta_tag = dist_tags.get("beta")
 
                 if beta_tag:
-                    # 有 dist-tags.beta
                     if "beta" in latest_tag.lower():
                         stable_version = None
                         beta_version = latest_tag
@@ -117,7 +118,6 @@ def search_packages():
                         stable_version = latest_tag
                         beta_version = beta_tag
                 else:
-                    # 无 dist-tags，从版本号推断
                     if "beta" in version.lower():
                         stable_version = None
                         beta_version = version
@@ -133,8 +133,8 @@ def search_packages():
                     "npm_url": f"https://www.npmjs.com/package/{name}",
                 })
 
-            total = data.get("total", 0)
-            if len(all_packages) >= total or not objects:
+            # 如果当前页没有 @ohos-ports 包，说明已翻完，停止
+            if page_ohos_count == 0:
                 break
             page += 1
             time.sleep(1)
