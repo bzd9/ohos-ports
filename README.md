@@ -20,6 +20,8 @@ ohos-ports 致力于将 npm 生态中的三方库移植到 OpenHarmony（以下�
 | @ohos-ports/bun-pty | 0.4.10-1 | `npm i @ohos-ports/bun-pty` |
 | @ohos-ports/lightningcss | 1.33.0-1 | `npm i @ohos-ports/lightningcss` |
 | @ohos-ports/opentui-core | 0.4.5-patch.2 | `npm i @ohos-ports/opentui-core` |
+| @ohos-ports/pprof | 5.17.0 | `npm i @ohos-ports/pprof` |
+| @ohos-ports/resvg-js | 2.6.2 | `npm i @ohos-ports/resvg-js` |
 | @ohos-ports/tailwindcss-oxide | 4.3.3-1 | `npm i @ohos-ports/tailwindcss-oxide` |
 <!-- PORTS_TABLE_END -->
 
