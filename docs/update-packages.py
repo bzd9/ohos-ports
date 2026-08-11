@@ -4,7 +4,7 @@
 
 策略：
 1. GET /-/user/ohos-ports/package — 一次请求获取全部包名列表
-2. 并发 GET /@ohos-ports/<name> — 获取每个包的 packument（dist-tags + description）
+2. 并发 GET /@ohos-ports/<name> — 获取每个包的 packument（dist-tags + description + deprecated）
 3. 从 dist-tags 判断 stable/beta
 
 输出：
@@ -113,11 +113,18 @@ def fetch_package_detail(name):
             stable_version = latest
             beta_version = None
 
+    # 检查最新版是否被废弃
+    versions = data.get("versions", {})
+    latest_info = versions.get(latest, {}) if latest else {}
+    deprecated_msg = latest_info.get("deprecated", "")
+
     return {
         "name": name,
         "stable_version": stable_version,
         "beta_version": beta_version,
         "description": description,
+        "deprecated": bool(deprecated_msg),
+        "deprecated_message": deprecated_msg or None,
         "npm_url": f"https://www.npmjs.com/package/{name}",
     }
 
@@ -165,6 +172,8 @@ def generate_output(packages, ports_map):
             "stable_version": p["stable_version"],
             "beta_version": p["beta_version"],
             "description": p["description"],
+            "deprecated": p["deprecated"],
+            "deprecated_message": p["deprecated_message"],
             "source": "CI发布" if is_ci else "本地发布",
             "npm_url": p["npm_url"],
         })
@@ -188,10 +197,12 @@ def generate_output(packages, ports_map):
 
     ci_count = sum(1 for p in result if p["source"] == "CI发布")
     local_count = len(result) - ci_count
+    deprecated_count = sum(1 for p in result if p["deprecated"])
     index_data = {
         "total": len(result),
         "ci_count": ci_count,
         "local_count": local_count,
+        "deprecated_count": deprecated_count,
         "last_updated": str(date.today()),
     }
     with open(INDEX_PATH, "w", encoding="utf-8") as f:
