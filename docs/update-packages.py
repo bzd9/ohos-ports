@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-通过 npm Registry Search API 查询 @ohos-ports scope 下所有已发布的包。
+通过 npm Registry API 查询 @ohos-ports scope 下所有已发布的包。
 
 策略：
-1. 优先用 scope:ohos-ports 限定符（npmjs.org 官方支持）
-2. 降级用 %40ohos-ports 全文搜索
-3. 如有 dist-tags 用它判断 stable/beta，否则从版本号推断
+1. GET /-/user/ohos-ports/package — 一次请求获取全部包名列表
+2. 并发 GET /@ohos-ports/<name> — 获取每个包的 packument（dist-tags + description）
+3. 从 dist-tags 判断 stable/beta
 
 输出：
 - docs/data/packages.jsonl（每行一个包）
@@ -15,6 +15,7 @@
 用法：python3 docs/update-packages.py
 环境变量：
   NPM_REGISTRY - 默认 https://registry.npmjs.org
+  NPM_ORG     - 默认 ohos-ports
 """
 
 import json
@@ -24,8 +25,10 @@ import time
 import urllib.request
 import urllib.error
 from datetime import date
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 REGISTRY = os.environ.get("NPM_REGISTRY", "https://registry.npmjs.org")
+NPM_ORG = os.environ.get("NPM_ORG", "ohos-ports")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(SCRIPT_DIR)
 PORTS_DIR = os.path.join(REPO_DIR, "ports")
@@ -71,79 +74,80 @@ def get_ports_packages():
     return ports
 
 
+def fetch_package_detail(name):
+    """获取单个包的完整 packument，提取 dist-tags 和 description"""
+    url = f"{REGISTRY}/{name}"
+    try:
+        data = fetch_json(url)
+    except Exception as e:
+        print(f"  Failed to fetch {name}: {e}")
+        return None
+
+    dist_tags = data.get("dist-tags", {})
+    latest = dist_tags.get("latest")
+    beta = dist_tags.get("beta")
+    description = data.get("description", "")
+
+    # 如果顶层 description 为空，从版本历史中查找（最新版可能漏设了 description）
+    if not description:
+        versions = data.get("versions", {})
+        for ver_key in sorted(versions.keys(), reverse=True):
+            ver_desc = versions[ver_key].get("description", "")
+            if ver_desc:
+                description = ver_desc
+                break
+
+    # 判断 stable/beta
+    if beta:
+        if "beta" in (latest or "").lower():
+            stable_version = None
+            beta_version = latest
+        else:
+            stable_version = latest
+            beta_version = beta
+    else:
+        if latest and "beta" in latest.lower():
+            stable_version = None
+            beta_version = latest
+        else:
+            stable_version = latest
+            beta_version = None
+
+    return {
+        "name": name,
+        "stable_version": stable_version,
+        "beta_version": beta_version,
+        "description": description,
+        "npm_url": f"https://www.npmjs.com/package/{name}",
+    }
+
+
 def search_packages():
-    """搜索 @ohos-ports 包，返回完整数据列表"""
-    queries = [
-        ("%40ohos-ports", "全文搜索"),
-    ]
+    """查询 @ohos-ports 下所有包，返回完整数据列表"""
+    # Step 1: 一次请求获取全部包名列表
+    print(f"  Fetching package list from /-/user/{NPM_ORG}/package ...")
+    url = f"{REGISTRY}/-/user/{NPM_ORG}/package"
+    data = fetch_json(url)
+    package_names = sorted(data.keys())
+    print(f"  Found {len(package_names)} packages")
 
-    for query_text, desc in queries:
-        all_packages = []
-        page = 0
-        while True:
-            url = f"{REGISTRY}/-/v1/search?text={query_text}&size=250&from={page * 250}"
-            print(f"  Search [{desc}] page {page}...")
-            try:
-                data = fetch_json(url)
-            except Exception as e:
-                print(f"  Search failed: {e}")
-                break
+    # Step 2: 并发获取每个包的 packument
+    print(f"  Fetching packuments (20 concurrent) ...")
+    packages = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_name = {executor.submit(fetch_package_detail, name): name for name in package_names}
+        for future in as_completed(future_to_name):
+            done += 1
+            pkg = future.result()
+            if pkg:
+                packages.append(pkg)
+            if done % 50 == 0:
+                print(f"    Progress: {done}/{len(package_names)}")
 
-            objects = data.get("objects", [])
-            if not objects:
-                break
-
-            page_ohos_count = 0
-            for obj in objects:
-                pkg = obj.get("package", {})
-                name = pkg.get("name", "")
-                if not name.startswith("@ohos-ports/"):
-                    continue
-                page_ohos_count += 1
-
-                version = pkg.get("version", "")
-                dist_tags = pkg.get("dist-tags", {})
-                description = pkg.get("description", "")
-
-                # 判断 stable/beta
-                latest_tag = dist_tags.get("latest", version)
-                beta_tag = dist_tags.get("beta")
-
-                if beta_tag:
-                    if "beta" in latest_tag.lower():
-                        stable_version = None
-                        beta_version = latest_tag
-                    else:
-                        stable_version = latest_tag
-                        beta_version = beta_tag
-                else:
-                    if "beta" in version.lower():
-                        stable_version = None
-                        beta_version = version
-                    else:
-                        stable_version = version
-                        beta_version = None
-
-                all_packages.append({
-                    "name": name,
-                    "stable_version": stable_version,
-                    "beta_version": beta_version,
-                    "description": description,
-                    "npm_url": f"https://www.npmjs.com/package/{name}",
-                })
-
-            # 如果当前页没有 @ohos-ports 包，说明已翻完，停止
-            if page_ohos_count == 0:
-                break
-            page += 1
-            time.sleep(1)
-
-        if all_packages:
-            print(f"  [{desc}] found {len(all_packages)} packages")
-            return all_packages
-        print(f"  [{desc}] found 0, trying next...")
-
-    return []
+    packages.sort(key=lambda x: x["name"])
+    print(f"  Successfully fetched {len(packages)}/{len(package_names)} packages")
+    return packages
 
 
 def generate_output(packages, ports_map):
