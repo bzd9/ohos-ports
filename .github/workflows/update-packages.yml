@@ -9,11 +9,10 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
+          token: ${{ secrets.PAT_TOKEN }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
