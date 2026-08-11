@@ -151,7 +151,7 @@ def search_packages():
 
 
 def generate_output(packages, ports_map):
-    """生成 packages.jsonl + index.json"""
+    """生成 packages.jsonl + index.json，数据无变化时跳过写入"""
     os.makedirs(DATA_DIR, exist_ok=True)
 
     result = []
@@ -171,12 +171,21 @@ def generate_output(packages, ports_map):
 
     result.sort(key=lambda x: (x["source"] != "CI发布", x["name"]))
 
-    # packages.jsonl
-    with open(JSONL_PATH, "w", encoding="utf-8") as f:
-        for p in result:
-            f.write(json.dumps(p, ensure_ascii=False) + "\n")
+    # 生成新内容，与旧文件比对
+    new_jsonl = "".join(json.dumps(p, ensure_ascii=False) + "\n" for p in result)
+    old_jsonl = ""
+    if os.path.exists(JSONL_PATH):
+        with open(JSONL_PATH, "r", encoding="utf-8") as f:
+            old_jsonl = f.read()
 
-    # index.json
+    if new_jsonl == old_jsonl:
+        print("  No changes, skipping write")
+        return result
+
+    # 数据有变化才写入
+    with open(JSONL_PATH, "w", encoding="utf-8") as f:
+        f.write(new_jsonl)
+
     ci_count = sum(1 for p in result if p["source"] == "CI发布")
     local_count = len(result) - ci_count
     index_data = {
