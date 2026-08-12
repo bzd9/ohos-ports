@@ -2,5 +2,5 @@
 set -e
 
 cd pprof-5.17.0
-# --provenance 生成来源证明
-npm stage publish --provenance --tag latest --access public
+# 包首次发布，npm stage publish 要求包已存在（返回 404），先直接 publish 创建包
+npm publish --access public
