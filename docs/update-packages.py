@@ -74,6 +74,58 @@ def get_ports_packages():
     return ports
 
 
+def package_exists(name, registry=REGISTRY):
+    """快速检查包是否在 npm registry 上存在（404 即不存在）"""
+    url = f"{registry}/{name}"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except urllib.error.HTTPError:
+        return False
+    except Exception:
+        return False
+
+
+def find_original_name(short_name, packument_data):
+    """从 packument 数据和 npm registry 查询中推断原始包名
+
+    策略：
+    1. 检查 repository.directory 中的 @scope/name 模式
+    2. 尝试 unscoped short_name
+    3. 尝试 scoped 变体（在 dash 位置拆分）
+    4. fallback 到 short_name
+    """
+    # Step 1: 检查 repository.directory
+    dist_tags = packument_data.get("dist-tags", {})
+    latest = dist_tags.get("latest") or dist_tags.get("beta")
+    versions = packument_data.get("versions", {})
+    latest_info = versions.get(latest, {}) if latest else {}
+    repo = latest_info.get("repository", {})
+    repo_dir = repo.get("directory", "") if isinstance(repo, dict) else ""
+    if repo_dir:
+        match = re.search(r"(@[a-z0-9][a-z0-9.-]*/[a-z0-9][a-z0-9.-]*)", repo_dir, re.I)
+        if match:
+            return match.group(1)
+
+    # Step 2: 尝试 unscoped short_name
+    if package_exists(short_name):
+        return short_name
+
+    # Step 3: 尝试 scoped 变体
+    parts = short_name.split("-")
+    if len(parts) > 1:
+        for i in range(1, len(parts)):
+            scope = "-".join(parts[:i])
+            pkg = "-".join(parts[i:])
+            scoped = f"@{scope}/{pkg}"
+            if package_exists(scoped):
+                return scoped
+
+    # Step 4: fallback
+    return short_name
+
+
 def fetch_package_detail(name):
     """获取单个包的完整 packument，提取 dist-tags 和 description"""
     url = f"{REGISTRY}/{name}"
@@ -118,8 +170,16 @@ def fetch_package_detail(name):
     latest_info = versions.get(latest, {}) if latest else {}
     deprecated_msg = latest_info.get("deprecated", "")
 
+    # 查找原始包名
+    short_name = name.replace("@ohos-ports/", "")
+    original_name = find_original_name(short_name, data)
+    original_npm_url = f"https://www.npmjs.com/package/{original_name}"
+
     return {
         "name": name,
+        "short_name": short_name,
+        "original_name": original_name,
+        "original_npm_url": original_npm_url,
         "stable_version": stable_version,
         "beta_version": beta_version,
         "description": description,
@@ -163,12 +223,14 @@ def generate_output(packages, ports_map):
 
     result = []
     for p in packages:
-        short_name = p["name"].replace("@ohos-ports/", "")
+        short_name = p.get("short_name") or p["name"].replace("@ohos-ports/", "")
         is_ci = short_name in ports_map
 
-        result.append({
+        entry = {
             "name": p["name"],
             "short_name": short_name,
+            "original_name": p.get("original_name", short_name),
+            "original_npm_url": p.get("original_npm_url"),
             "stable_version": p["stable_version"],
             "beta_version": p["beta_version"],
             "description": p["description"],
@@ -176,7 +238,8 @@ def generate_output(packages, ports_map):
             "deprecated_message": p["deprecated_message"],
             "source": "CI发布" if is_ci else "本地发布",
             "npm_url": p["npm_url"],
-        })
+        }
+        result.append(entry)
 
     result.sort(key=lambda x: (x["source"] != "CI发布", x["name"]))
 
