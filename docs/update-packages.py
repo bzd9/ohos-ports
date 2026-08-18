@@ -126,6 +126,31 @@ def find_original_name(short_name, packument_data):
     return short_name
 
 
+def _is_newer(a, b):
+    """判断版本 a 是否比 b 更新
+
+    通过逐段比较版本号组件，数字按数值比较，非数字按字符串比较。
+    例: _is_newer("10.5.8-beta.3", "10.5.8-beta.1") → True
+    """
+    pa = re.split(r"[.\-]", a or "")
+    pb = re.split(r"[.\-]", b or "")
+    for i in range(max(len(pa), len(pb))):
+        va = pa[i] if i < len(pa) else "0"
+        vb = pb[i] if i < len(pb) else "0"
+        try:
+            na, nb = int(va), int(vb)
+            if na > nb:
+                return True
+            if na < nb:
+                return False
+        except ValueError:
+            if va > vb:
+                return True
+            if va < vb:
+                return False
+    return False
+
+
 def fetch_package_detail(name, cache=None):
     """获取单个包的完整 packument，提取 dist-tags 和 description"""
     url = f"{REGISTRY}/{name}"
@@ -153,7 +178,8 @@ def fetch_package_detail(name, cache=None):
     if beta:
         if "beta" in (latest or "").lower():
             stable_version = None
-            beta_version = latest
+            # latest 和 beta tag 都是 beta 版本，取更新的
+            beta_version = latest if _is_newer(latest, beta) else beta
         else:
             stable_version = latest
             beta_version = beta
