@@ -126,7 +126,7 @@ def find_original_name(short_name, packument_data):
     return short_name
 
 
-def fetch_package_detail(name):
+def fetch_package_detail(name, cache=None):
     """获取单个包的完整 packument，提取 dist-tags 和 description"""
     url = f"{REGISTRY}/{name}"
     try:
@@ -170,10 +170,15 @@ def fetch_package_detail(name):
     latest_info = versions.get(latest, {}) if latest else {}
     deprecated_msg = latest_info.get("deprecated", "")
 
-    # 查找原始包名
+    # 查找原始包名：优先使用缓存，仅对新增包查询 npm
     short_name = name.replace("@ohos-ports/", "")
-    original_name = find_original_name(short_name, data)
-    original_npm_url = f"https://www.npmjs.com/package/{original_name}"
+    cached = cache.get(name) if cache else None
+    if cached:
+        original_name = cached["original_name"]
+        original_npm_url = cached.get("original_npm_url") or f"https://www.npmjs.com/package/{original_name}"
+    else:
+        original_name = find_original_name(short_name, data)
+        original_npm_url = f"https://www.npmjs.com/package/{original_name}"
 
     return {
         "name": name,
@@ -189,7 +194,29 @@ def fetch_package_detail(name):
     }
 
 
-def search_packages():
+def load_original_name_cache():
+    """从现有 packages.jsonl 加载已解析的原始包名缓存，避免重复查询 npm"""
+    cache = {}
+    if not os.path.exists(JSONL_PATH):
+        return cache
+    with open(JSONL_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                p = json.loads(line)
+                if p.get("original_name"):
+                    cache[p["name"]] = {
+                        "original_name": p["original_name"],
+                        "original_npm_url": p.get("original_npm_url"),
+                    }
+            except Exception:
+                pass
+    return cache
+
+
+def search_packages(cache=None):
     """查询 @ohos-ports 下所有包，返回完整数据列表"""
     # Step 1: 一次请求获取全部包名列表
     print(f"  Fetching package list from /-/user/{NPM_ORG}/package ...")
@@ -198,12 +225,17 @@ def search_packages():
     package_names = sorted(data.keys())
     print(f"  Found {len(package_names)} packages")
 
+    # 统计缓存命中情况
+    cached_count = sum(1 for n in package_names if cache and n in cache)
+    new_count = len(package_names) - cached_count
+    print(f"  Cache: {cached_count} cached, {new_count} new (will query npm for original_name)")
+
     # Step 2: 并发获取每个包的 packument
     print(f"  Fetching packuments (20 concurrent) ...")
     packages = []
     done = 0
     with ThreadPoolExecutor(max_workers=20) as executor:
-        future_to_name = {executor.submit(fetch_package_detail, name): name for name in package_names}
+        future_to_name = {executor.submit(fetch_package_detail, name, cache): name for name in package_names}
         for future in as_completed(future_to_name):
             done += 1
             pkg = future.result()
@@ -214,6 +246,86 @@ def search_packages():
 
     packages.sort(key=lambda x: x["name"])
     print(f"  Successfully fetched {len(packages)}/{len(package_names)} packages")
+    return packages
+
+
+PLATFORM_SUFFIXES = [
+    "-openharmony-arm64",
+    "-openharmony-arm",
+    "-openharmony",
+]
+
+
+def _try_find_scoped_parent(parent_short, suffix):
+    """尝试从 npm 查询父包的 scoped 名称，返回拼接后的平台子包名称
+
+    例如 parent_short='supabase-cli', suffix='-openharmony-arm64'
+    若 npm 上存在 @supabase/cli，则返回 @supabase/cli-openharmony-arm64
+    """
+    parts = parent_short.split("-")
+    if len(parts) <= 1:
+        return None
+    for i in range(1, len(parts)):
+        scope = "-".join(parts[:i])
+        name = "-".join(parts[i:])
+        scoped = f"@{scope}/{name}"
+        if package_exists(scoped):
+            return f"{scoped}{suffix}"
+    return None
+
+
+def infer_platform_original_names(packages):
+    """后处理：从已解析的父包推断平台子包的原始包名
+
+    对于 original_name == short_name 的平台子包（如 xxx-openharmony-arm64），
+    检查是否存在已解析的父包（如 xxx），若父包解析为 scoped 名称（如 @scope/xxx），
+    则将相同的 scope 应用于平台子包（如 @scope/xxx-openharmony-arm64）。
+    """
+    # 构建 short_name -> original_name 映射（仅 scoped 的）
+    scope_map = {}
+    # 同时构建 short_name 集合，用于判断父包是否在列表中
+    all_short_names = set()
+    for p in packages:
+        orig = p.get("original_name", "")
+        short = p.get("short_name", "")
+        all_short_names.add(short)
+        if orig.startswith("@") and orig != short:
+            scope_map[short] = orig
+
+    fixed = 0
+    for p in packages:
+        orig = p.get("original_name", "")
+        short = p.get("short_name", "")
+        if orig != short:
+            continue  # 已解析，跳过
+
+        for suf in PLATFORM_SUFFIXES:
+            if not short.endswith(suf):
+                continue
+            parent_short = short[: -len(suf)]
+
+            if parent_short in scope_map:
+                # 父包在列表中且已解析为 scoped
+                parent_orig = scope_map[parent_short]
+                slash_idx = parent_orig.index("/")
+                scope = parent_orig[:slash_idx]
+                parent_name = parent_orig[slash_idx + 1 :]
+                inferred = f"{scope}/{parent_name}{suf}"
+            elif parent_short not in all_short_names:
+                # 父包不在列表中，尝试从 npm 查询父包的 scope
+                inferred = _try_find_scoped_parent(parent_short, suf)
+                if not inferred:
+                    break  # 无法推断，保持 fallback
+            else:
+                # 父包在列表中但是 unscoped，平台子包也应是 unscoped
+                break
+
+            p["original_name"] = inferred
+            p["original_npm_url"] = f"https://www.npmjs.com/package/{inferred}"
+            fixed += 1
+            break
+    if fixed:
+        print(f"  Inferred {fixed} platform package original names from parents")
     return packages
 
 
@@ -242,6 +354,9 @@ def generate_output(packages, ports_map):
         result.append(entry)
 
     result.sort(key=lambda x: (x["source"] != "CI发布", x["name"]))
+
+    # 后处理：从已解析的父包推断平台子包的原始包名
+    result = infer_platform_original_names(result)
 
     # 生成新内容，与旧文件比对
     new_jsonl = "".join(json.dumps(p, ensure_ascii=False) + "\n" for p in result)
@@ -311,8 +426,12 @@ def main():
     ports_map = get_ports_packages()
     print(f"Ports: {len(ports_map)} - {list(ports_map.keys())}")
 
+    print("\nLoading original_name cache...")
+    cache = load_original_name_cache()
+    print(f"  Cached: {len(cache)} packages")
+
     print("\nSearching @ohos-ports packages...")
-    packages = search_packages()
+    packages = search_packages(cache)
 
     print("\nGenerating output...")
     result = generate_output(packages, ports_map)
