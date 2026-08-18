@@ -101,13 +101,13 @@ var currentData = [];
 
 async function loadData() {
   try {
-    var resp = await fetch('data/index.json');
+    var resp = await fetch('data/index.json', {cache: 'no-cache'});
     indexData = await resp.json();
     document.getElementById('updated').textContent = ' · 更新日期：' + indexData.last_updated;
     renderStats();
 
     // 加载 jsonl
-    var resp2 = await fetch('data/packages.jsonl');
+    var resp2 = await fetch('data/packages.jsonl', {cache: 'no-cache'});
     var text = await resp2.text();
     var lines = text.trim().split('\n');
     allPackages = [];
