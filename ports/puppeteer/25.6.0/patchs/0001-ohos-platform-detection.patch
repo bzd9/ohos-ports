@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: ohos-ports
+Date: Fri, 15 Aug 2026 00:00:00 +0800
+Subject: [PATCH 1/4] detectPlatform: add openharmony support
+
+Skip browser download on openharmony platform.
+---
+ .../browsers/src/detectPlatform.ts                | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/packages/browsers/src/detectPlatform.ts b/packages/browsers/src/detectPlatform.ts
+--- a/packages/browsers/src/detectPlatform.ts
++++ b/packages/browsers/src/detectPlatform.ts
+@@ -XXX,XX +XXX,XX @@
+ export function detectBrowserPlatform(): BrowserPlatform | undefined {
+   switch (process.platform) {
+     case 'win32': {
+       // ...
+       return BrowserPlatform.WIN64;
+     }
++    case 'openharmony': {
++      return undefined;
++    }
+     case 'darwin': {
+       // ...
+     }
