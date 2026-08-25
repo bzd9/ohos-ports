@@ -1,0 +1,22 @@
+--- a/lib/binding.js
++++ b/lib/binding.js
+@@ -2,7 +2,7 @@
+ const fs = require('fs');
+ const path = require('path');
+ 
+-const PREBUILD_PLATFORMS = ['linux', 'darwin', 'win32'];
++const PREBUILD_PLATFORMS = ['linux', 'darwin', 'win32', 'openharmony'];
+ const PREBUILD_ARCHS = ['x64', 'arm64'];
+ let DEFAULT_ADDON;
+ 
+--- a/binding.gyp
++++ b/binding.gyp
+@@ -36,7 +36,7 @@
+               'LinkTimeCodeGeneration': 1,
+             },
+           },
+-          'conditions': [['OS=="linux"', {
++          'conditions': [['OS=="linux" or OS=="openharmony"', {
+             'ldflags': ['-flto', '-Wl,-Bsymbolic', '-Wl,--exclude-libs,ALL'],
+             'libraries': ['-ldl'],
+           }]],

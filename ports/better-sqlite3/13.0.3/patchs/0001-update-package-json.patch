@@ -1,0 +1,19 @@
+--- a/package.json
++++ b/package.json
+@@ -1,12 +1,13 @@
+ {
+-  "name": "better-sqlite3",
++  "name": "@ohos-ports/better-sqlite3",
+   "version": "13.0.3",
+-  "description": "The fastest and simplest library for SQLite in Node.js.",
++  "description": "The fastest and simplest library for SQLite in Node.js. — OpenHarmony (OHOS) port.",
+   "homepage": "http://github.com/WiseLibs/better-sqlite3",
+   "author": "Joshua Wise <joshuathomaswise@gmail.com>",
+   "repository": {
+     "type": "git",
+-    "url": "git://github.com/WiseLibs/better-sqlite3.git"
++    "url": "https://github.com/ohos-ports/ohos-ports.git",
++    "directory": "ports/better-sqlite3/13.0.3"
+   },
+   "main": "lib/index.js",
+   "exports": {
