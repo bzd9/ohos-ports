@@ -16,6 +16,7 @@ ohos-ports 致力于将 npm 生态中的三方库移植到 OpenHarmony（以下�
 <!-- PORTS_TABLE_START -->
 | 包名 | 版本 | 安装 |
 |------|------|------|
+| @ohos-ports/better-sqlite3 | 13.0.3 | `npm i @ohos-ports/better-sqlite3` |
 | @ohos-ports/bufferutil | 4.1.0-2 | `npm i @ohos-ports/bufferutil` |
 | @ohos-ports/bun-pty | 0.4.10-1 | `npm i @ohos-ports/bun-pty` |
 | @ohos-ports/lightningcss | 1.33.0-1 | `npm i @ohos-ports/lightningcss` |
