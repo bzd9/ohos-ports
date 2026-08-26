@@ -3,7 +3,7 @@ set -e
 
 # Lighthouse is a pure JavaScript package (no native C++ compilation).
 # The npm tarball already includes pre-built dist/ report bundles, so
-# the build process is: download → patch → strip dev files → verify.
+# the build process is: download → patch → strip dev files → verify
 
 VERSION=13.4.1
 PORT_VERSION=13.4.1-beta.3
