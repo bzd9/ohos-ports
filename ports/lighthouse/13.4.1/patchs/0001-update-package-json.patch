@@ -18,7 +18,7 @@
      "type": "git",
 -    "url": "git+https://github.com/GoogleChrome/lighthouse.git"
 +    "url": "https://github.com/ohos-ports/ohos-ports.git",
-+    "directory": "ports/lighthouse/13.4.1-beta.3"
++    "directory": "ports/lighthouse/13.4.1"
    },
    "keywords": [
      "google",

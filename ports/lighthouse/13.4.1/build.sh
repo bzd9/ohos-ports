@@ -1,24 +1,58 @@
 #!/bin/sh
 set -e
 
-# Lighthouse is a pure JavaScript package (no native C++ compilation).
-# The npm tarball already includes pre-built dist/ report bundles, so
-# the build process is: download → patch → strip dev files → verify
+# Lighthouse is a pure JavaScript/TypeScript package (no native C++ compilation).
+# Build from GitHub source: download → patch → install deps → compile → strip dev files → verify.
 
 VERSION=13.4.1
 PORT_VERSION=13.4.1-beta.3
 PKG=lighthouse
 
-# Download the pre-built npm package (includes dist/ bundles).
-npm pack lighthouse@${VERSION}
-tar -zxf ${PKG}-${VERSION}.tgz
-rm ${PKG}-${VERSION}.tgz
-# npm tarball extracts to package/, rename to final port version.
-mv package "${PKG}-${PORT_VERSION}"
+# Download source from GitHub (not npm) and build from source.
+curl -fsSL "https://github.com/GoogleChrome/lighthouse/archive/refs/tags/v${VERSION}.tar.gz" -o ${PKG}.tar.gz
+tar -zxf ${PKG}.tar.gz
+rm ${PKG}.tar.gz
+# GitHub source archives extract to lighthouse-13.4.1/, rename to port version.
+mv "${PKG}-${VERSION}" "${PKG}-${PORT_VERSION}"
 
 cd "${PKG}-${PORT_VERSION}"
 patch -p1 < ../patchs/0001-update-package-json.patch
 patch -p1 < ../patchs/0002-openharmony-browser-support.patch
+
+# Install dependencies (including devDependencies for TypeScript/esbuild).
+npm install --ignore-scripts
+export PATH="$(pwd)/node_modules/.bin:$PATH"
+
+# Build dist bundles (esbuild) — generates dist/report/*.js
+# Equivalent to: yarn build-report --standalone --flow --esm
+node build/build-report-components.js
+node build/build-report.js --standalone --flow --esm
+
+# Compile TypeScript — generates .js and .d.ts files
+# Equivalent to: yarn type-check
+tsc --build ./tsconfig-all.json
+
+# Copy generated .d.ts/.d.cts from tsc output to package root.
+# Equivalent to: yarn build-types (the rsync part)
+rsync -a .tmp/tsbuildinfo/ ./ --include='*.d.ts' --include='*.d.cts' --exclude='*.map' --exclude='*.tsbuildinfo'
+
+# Verify dist bundles were generated.
+test -f dist/report/standalone.js
+test -f dist/report/bundle.esm.js
+test -f dist/report/flow.js
+
+# Use npm pack to create a clean package (respects .npmignore).
+# --ignore-scripts: skip prepack (already built above).
+TARBALL=$(npm pack --ignore-scripts 2>/dev/null)
+mkdir -p ../clean-package
+tar -zxf "$TARBALL" -C ../clean-package
+rm "$TARBALL"
+# Replace source directory with clean packaged version.
+cd ..
+rm -rf "${PKG}-${PORT_VERSION}"
+mv clean-package/package "${PKG}-${PORT_VERSION}"
+rm -rf clean-package
+cd "${PKG}-${PORT_VERSION}"
 
 # Remove dev-only files not needed in the published package.
 # tsconfig files (TypeScript build config, not needed at runtime).
@@ -61,7 +95,7 @@ VSN=$(node -e "console.log(require('./package.json').version)")
 grep -q "'openharmony'" cli/run.js
 grep -q "ohos-aa" cli/run.js
 
-# Verify dist bundles exist (pre-built report renderer).
+# Verify dist bundles exist (built from source).
 test -f dist/report/standalone.js
 test -f dist/report/bundle.esm.js
 test -f dist/report/flow.js
