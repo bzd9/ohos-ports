@@ -30,11 +30,16 @@ node build/build-report.js --standalone --flow --esm
 
 # Compile TypeScript — generates .js and .d.ts files
 # Equivalent to: yarn type-check
-tsc --build ./tsconfig-all.json --noEmitOnError false || true
+tsc --build ./tsconfig-all.json || true
 
 # Copy generated .d.ts/.d.cts from tsc output to package root.
 # Equivalent to: yarn build-types (the rsync part)
-rsync -a .tmp/tsbuildinfo/ ./ --include='*.d.ts' --include='*.d.cts' --exclude='*.map' --exclude='*.tsbuildinfo'
+# Using find+cp instead of rsync for portability (rsync not available on all CI runners).
+find .tmp/tsbuildinfo -type f \( -name '*.d.ts' -o -name '*.d.cts' \) 2>/dev/null | while IFS= read -r f; do
+  dest="${f#.tmp/tsbuildinfo/}"
+  mkdir -p "$(dirname "$dest")"
+  cp "$f" "$dest"
+done
 
 # Verify dist bundles were generated.
 test -f dist/report/standalone.js
