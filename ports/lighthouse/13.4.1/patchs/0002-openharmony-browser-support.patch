@@ -7,7 +7,7 @@
 -function getDebuggableChrome(flags) {
 +async function getDebuggableChrome(flags) {
 +  // HarmonyOS: local browser launcher (runs directly on device)
-+  if (process.platform === 'openharmony') {
++  if (/** @type {string} */(process.platform) === 'openharmony') {
 +    const cdpPort = flags.port || 9333;
 +    log.log('CLI', `Launching browser (HarmonyOS local, port=${cdpPort})`);
 +
@@ -16,7 +16,7 @@
 +    // Direct invocation of local CLI tools (no hdc needed)
 +    const OHOS_AA = '/system/bin/cli_tool/executable/ohos-aa';
 +    const OHOS_BM = '/system/bin/cli_tool/executable/ohos-bm';
-+    const execTool = (binary, args, timeout = 30000) => {
++    const execTool = (/** @type {string} */ binary, /** @type {string[]} */ args, /** @type {number} */ timeout = 30000) => {
 +      try {
 +        return execFileSync(binary, args, {timeout, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']}).trim();
 +      } catch (e) {
@@ -70,11 +70,11 @@
 +    // 7. 等待浏览器完全就绪
 +    await new Promise(r => setTimeout(r, 3000));
 +
-+    return {
++    return /** @type {any} */ ({
 +      port: cdpPort,
 +      kill: () => { try { execTool(OHOS_AA, ['force-stop', '--bundlename', pkg]); } catch {} },
 +      process: { pid: 0 },
-+    };
++    });
 +  }
 +
 +  // Standard Chrome launch (non-HarmonyOS)
