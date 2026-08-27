@@ -20,7 +20,7 @@ patch -p1 < ../patchs/0001-update-package-json.patch
 patch -p1 < ../patchs/0002-openharmony-browser-support.patch
 
 # Install dependencies (including devDependencies for TypeScript/esbuild).
-npm install --ignore-scripts
+npm install --ignore-scripts --legacy-peer-deps
 export PATH="$(pwd)/node_modules/.bin:$PATH"
 
 # Build dist bundles (esbuild) — generates dist/report/*.js
@@ -107,7 +107,7 @@ node --check cli/run.js
 # Lighthouse requires puppeteer-core at runtime, so install it first.
 # npm install may fail on some platforms (dependency resolution); that's OK —
 # the import test below handles missing deps gracefully.
-npm install --ignore-scripts --no-save puppeteer-core chrome-launcher || true
+npm install --ignore-scripts --legacy-peer-deps --no-save puppeteer-core chrome-launcher || true
 node --input-type=module -e '
   import("./core/index.js").then(() => {
     console.log("lighthouse module loaded successfully");
